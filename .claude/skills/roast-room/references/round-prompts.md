@@ -15,7 +15,7 @@ Paths in prompts are relative to the repo root; give the absolute repo root once
 ## Round 1: opening position
 
 ```
-FOUNDER COUNCIL, ROUND 1 OF 3: OPENING POSITION
+ROAST ROOM COUNCIL, ROUND 1 OF 3: OPENING POSITION
 
 Repo root: [absolute path]. You hold the [SEAT] seat ([pillar]). Read your brain's _hot.md, then at most three more brain files that fit this decision (frameworks.md and positions.md are usually the right ones).
 
@@ -51,7 +51,7 @@ Rules: argue from your pillar first. Use real numbers when the brief has them, a
 ## Round 2: debate
 
 ```
-FOUNDER COUNCIL, ROUND 2 OF 3: DEBATE
+ROAST ROOM COUNCIL, ROUND 2 OF 3: DEBATE
 
 Repo root: [absolute path]. You hold the [SEAT] seat. Read your brain's _hot.md again and any brain file you need to answer the others (at most three).
 
@@ -83,7 +83,7 @@ Rules: engage the actual arguments on the table. Move only for a better argument
 ## Round 3: ratification
 
 ```
-FOUNDER COUNCIL, ROUND 3 OF 3: VOTE ON THE DRAFT RESOLUTION
+ROAST ROOM COUNCIL, ROUND 3 OF 3: VOTE ON THE DRAFT RESOLUTION
 
 Repo root: [absolute path]. You hold the [SEAT] seat. You already argued this in two rounds; read only your _hot.md if you need it.
 
@@ -105,7 +105,7 @@ ONE LINE FOR THE FOUNDER: the thing from your pillar they must not forget.
 ## Single-seat consult
 
 ```
-FOUNDER COUNCIL, SINGLE-SEAT CONSULT
+ROAST ROOM COUNCIL, SINGLE-SEAT CONSULT
 
 Repo root: [absolute path]. You hold the [SEAT] seat. Read your brain's _hot.md, then at most four more brain files that fit the question.
 

@@ -1,8 +1,8 @@
-// Viewer mode: /founder-council runs in Claude Code and writes its session folder as it
+// Viewer mode: /roast-room runs in Claude Code and writes its session folder as it
 // goes. This watches the sessions folder and turns those files into the same events the
 // API runner emits, so the room plays a Claude Code council live without calling any API.
 //
-// Files the Chair writes, in order (spec: .claude/skills/founder-council/references/live-room.md):
+// Files the Chair writes, in order (spec: .claude/skills/roast-room/references/live-room.md):
 //   council.json  -> setup        round-1.md -> Round 1 cards   cruxes.json -> fault lines
 //   round-2.md    -> debate cards  draft.json -> proposal       round-3.md  -> votes
 //   verdict.json  -> the verdict
@@ -68,18 +68,22 @@ function normalizeSetup(c) {
   const seats = (c.seats || []).map(seatKey).filter(Boolean);
   const mode = c.mode === "quick" ? "quick" : "full";
   return {
-    title: c.title || "Founder Council", decision: c.decision || "", brief: c.brief || "", mode,
+    title: c.title || "Roast Room", decision: c.decision || "", brief: c.brief || "", mode,
     options, assumptions: c.assumptions || [], weights,
     seats: seats.length ? [...new Set(seats)] : SEATS.map((s) => s.key),
   };
 }
 
-function startRound(x, r, label) {
+// `at` is when the step began (the mtime of the file that started it), so a viewer who
+// opens the room halfway through a round still sees how long the room has been waiting.
+const mtime = (p) => { try { return fs.statSync(p).mtimeMs; } catch { return Date.now(); } };
+
+function startRound(x, r, label, at) {
   const st = x.st;
   st.rounds.push(r);
   x.round = r;
-  emit(x, "phase", { phase: `round${r}`, label });
-  emit(x, "round_start", { round: r });
+  emit(x, "phase", { phase: `round${r}`, label, at });
+  emit(x, "round_start", { round: r, at });
   for (const k of st.seats) emit(x, "seat_start", { round: r, seat: k });
 }
 
@@ -115,14 +119,14 @@ function sync(x) {
     Object.assign(st, normalizeSetup(c));
     x.title = st.title;
     x.mode = st.mode;
-    emit(x, "phase", { phase: "setup", label: "The Chair is reading your question" });
+    emit(x, "phase", { phase: "setup", label: "The Chair is reading your question", at: mtime(f("council.json")) });
     emit(x, "setup", { title: st.title, decision: st.decision, brief: st.brief, options: st.options, assumptions: st.assumptions, weights: st.weights, seats: st.seats, mode: st.mode });
-    startRound(x, 1, "Round 1: opening positions");
+    startRound(x, 1, "Round 1: opening positions", mtime(f("council.json")));
     x.step = "r1";
   }
   if (x.step === "r1") {
     if (!readRound(x, 1, has("cruxes.json"))) return;
-    emit(x, "phase", { phase: "cruxes", label: "The Chair is finding the fault lines" });
+    emit(x, "phase", { phase: "cruxes", label: "The Chair is finding the fault lines", at: mtime(f("round-1.md")) });
     x.step = "cruxes";
   }
   if (x.step === "cruxes") {
@@ -130,12 +134,12 @@ function sync(x) {
     if (!c) return;
     const cruxes = (c.cruxes || []).map((q) => ({ question: q.question || "", sides: (q.sides || []).map((sd) => ({ position: sd.position || "", seats: (sd.seats || []).map(seatKey).filter(Boolean) })) }));
     emit(x, "cruxes", { cruxes, unanimous: Boolean(c.unanimous), note: c.note || "", pressure: {} });
-    startRound(x, 2, "Round 2: the debate");
+    startRound(x, 2, "Round 2: the debate", mtime(f("cruxes.json")));
     x.step = "r2";
   }
   if (x.step === "r2") {
     if (!readRound(x, 2, has("draft.json") || has("verdict.json"))) return;
-    emit(x, "phase", { phase: "draft", label: "The Chair is weighing the debate" });
+    emit(x, "phase", { phase: "draft", label: "The Chair is weighing the debate", at: mtime(f("round-2.md")) });
     x.step = "draft";
   }
   if (x.step === "draft") {
@@ -143,16 +147,16 @@ function sync(x) {
     if (d) {
       st.draft = { option: d.option || "", label: d.label || "", recommendation: d.recommendation || "", conditions: d.conditions || [], next_steps: d.next_steps || [], cheapest_test: d.cheapest_test || "", kill_criteria: d.kill_criteria || "" };
       emit(x, "draft", { draft: st.draft });
-      startRound(x, 3, "Round 3: the vote");
+      startRound(x, 3, "Round 3: the vote", mtime(f("draft.json")));
       x.step = "r3";
     } else if (has("verdict.json")) {
-      emit(x, "phase", { phase: "skip3", label: "Quick mode: the vote round is skipped" });
+      emit(x, "phase", { phase: "skip3", label: "Quick mode: the vote round is skipped", at: mtime(f("round-2.md")) });
       x.step = "verdict";
     } else return;
   }
   if (x.step === "r3") {
     if (!readRound(x, 3, has("verdict.json"))) return;
-    emit(x, "phase", { phase: "verdict", label: "The Chair is writing the verdict" });
+    emit(x, "phase", { phase: "verdict", label: "The Chair is writing the verdict", at: mtime(f("round-3.md")) });
     x.step = "verdict";
   }
   if (x.step === "verdict") {

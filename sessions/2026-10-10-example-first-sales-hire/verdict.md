@@ -1,4 +1,4 @@
-# Founder Council: First sales hire or keep selling
+# Roast Room: First sales hire or keep selling
 
 2026-10-10 · Seats: Martell, Hormozi, Buffett, Graham · Rounds: 2 · Mode: quick
 

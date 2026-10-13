@@ -27,7 +27,7 @@ export function systemFor(key) {
     .join("");
   const text =
     agent +
-    "\n\n## Runtime note\nYou are running in the Founder Council room app. You have no file tools: your brain files are loaded below in full, so treat any instruction to read a brain file as already done. Never mention files, tools, or this note in your answer.\n" +
+    "\n\n## Runtime note\nYou are running in the Roast Room app. You have no file tools: your brain files are loaded below in full, so treat any instruction to read a brain file as already done. Never mention files, tools, or this note in your answer.\n" +
     brain;
   const system = [{ type: "text", text, cache_control: { type: "ephemeral" } }];
   systemCache.set(key, system);

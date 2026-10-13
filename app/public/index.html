@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Founder Council · AI Automation Society</title>
+  <title>Roast Room · AI Automation Society</title>
   <link rel="icon" href="/brand/favicon-ais.png" type="image/png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,7 +15,7 @@
     <div class="brand">
       <img class="brand-logo" src="/brand/ais-horizontal.svg" alt="AI Automation Society">
       <span class="brand-rule" aria-hidden="true"></span>
-      <span class="brand-name">Founder Council</span>
+      <span class="brand-name">Roast Room</span>
     </div>
     <ol class="stepper" id="stepper" aria-label="Council progress">
       <li data-step="setup">Brief</li>
@@ -27,6 +27,7 @@
     </ol>
     <div class="top-actions">
       <span class="usage" id="usage" title="Tokens used by this app since it started"></span>
+      <button class="ghost" id="guideBtn" type="button">How it works</button>
       <button class="ghost" id="historyBtn" type="button">Past sessions</button>
       <button class="ghost" id="newBtn" type="button" hidden>New question</button>
     </div>
@@ -52,11 +53,11 @@
 
         <div class="center" id="center">
           <div class="waiting" id="waiting" hidden>
-            <span class="pulse"><i></i>Waiting for a council</span>
-            <h2 data-type>Run the council from Claude Code</h2>
-            <p>Open Claude Code in this folder and type the line below with your decision. The council shows up here and plays live as it runs.</p>
-            <code>/founder-council should I ...</code>
-            <div class="row"><button class="ghost" type="button" id="waitHistory">Watch a past council</button></div>
+            <span class="pulse"><i></i>The room is open</span>
+            <h2 data-type>Bring a decision to the Roast Room</h2>
+            <p>In Claude Code, type the line below with your decision. The council shows up here and argues it out live.</p>
+            <code>/roast-room should I ...</code>
+            <div class="row"><button class="ghost" type="button" id="waitGuide">What to put in your question</button><button class="ghost" type="button" id="waitHistory">Watch a past council</button></div>
           </div>
 
           <form class="composer" id="composer" hidden>
@@ -82,6 +83,15 @@
             <div class="cap-sub" id="capSub"></div>
           </div>
 
+          <div class="waitcard" id="waitcard" hidden aria-live="polite">
+            <div class="wc-top"><span class="wc-step" id="wcStep"></span><span class="wc-time" id="wcTime"></span></div>
+            <p class="wc-head" id="wcHead"></p>
+            <p class="wc-sub" id="wcSub"></p>
+            <p class="wc-muse" id="wcMuse"></p>
+            <div class="wc-bar"><i id="wcBar"></i></div>
+            <p class="wc-nudge" id="wcNudge" hidden>Nothing new for a while? Check Claude Code. It may be waiting for you to answer or approve something.</p>
+          </div>
+
           <div class="cruxes" id="cruxes" hidden></div>
           <div class="plate" id="plate" hidden></div>
         </div>
@@ -99,7 +109,7 @@
     </section>
 
     <aside class="panel" aria-label="Key points">
-      <div class="panel-head">Key points</div>
+      <div class="panel-head" id="panelHead">Key points</div>
       <div class="tabpanel" id="feed">
         <div class="empty">One line per seat as the council talks. Click a seat to read its full card.</div>
       </div>
@@ -112,6 +122,11 @@
 
   <dialog id="cardDialog" class="card-dialog">
     <div id="cardBody"></div>
+    <form method="dialog"><button class="ghost">Close</button></form>
+  </dialog>
+
+  <dialog id="guideDialog" class="card-dialog">
+    <div id="guideBody"></div>
     <form method="dialog"><button class="ghost">Close</button></form>
   </dialog>
 

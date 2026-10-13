@@ -1,3 +1,5 @@
+import { downloadVerdictPdf } from "./pdf.js";
+
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -9,13 +11,56 @@ const SAMPLES = [
   ["Quit my job?", "I make $180k a year at a tech company. My side business (a paid newsletter) makes $6k a month and grew 8% a month this year. I have 9 months of expenses saved. Should I quit now, quit in 6 months, or keep both and hire a writer?"],
 ];
 
+const EXAMPLE = "I run a coaching business at $30k a month with 15 clients at $2,000 each. Should I raise to $3,500 for everyone, raise for new clients only, or keep $2,000? Close rate is about 50% and I have $40k in the bank. Success is $45k a month by March. I'm leaning toward raising for everyone because I'm underpaid.";
+
+// The how-to, shown in the side panel while the room is empty and in "How it works".
+const GUIDE = `
+  <div class="guide">
+    <div class="guide-sec">
+      <h4>How to use the Roast Room</h4>
+      <ol>
+        <li><span>Open Claude Code in this folder.</span></li>
+        <li><span>Type <code>/roast-room</code> and your decision.</span></li>
+        <li><span>Answer the Chair's questions. Then watch the council argue it out here.</span></li>
+        <li><span>When the verdict lands, download it as a PDF.</span></li>
+      </ol>
+    </div>
+    <div class="guide-sec">
+      <h4>What to put in your question</h4>
+      <ul>
+        <li><span><b>The decision</b> in one line.</span></li>
+        <li><span><b>Your options.</b> Two or three. "Keep doing what I do now" counts.</span></li>
+        <li><span><b>Your numbers.</b> Revenue, cash, and team size.</span></li>
+        <li><span><b>Your limits.</b> Deadline, hours, and budget.</span></li>
+        <li><span><b>What success looks like</b>, and by when.</span></li>
+        <li><span><b>Which way you're leaning</b>, and why. The council tests it.</span></li>
+      </ul>
+      <p class="note" style="margin-top:8px">Left something out? The Chair asks before the council starts.</p>
+    </div>
+    <div class="guide-sec">
+      <h4>Example</h4>
+      <div class="example">
+        <p><code>/roast-room</code> ${EXAMPLE.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</p>
+        <button class="ghost" type="button" data-copy-example>Copy this example</button>
+      </div>
+    </div>
+    <div class="guide-sec">
+      <h4>Good to know</h4>
+      <ul>
+        <li><span><b>Full council:</b> 7 advisors, 3 rounds. For big calls that are hard to undo.</span></li>
+        <li><span><b>Quick:</b> add <code>--quick</code> for 4 advisors and 2 rounds. Uses far less of your plan.</span></li>
+        <li><span><b>Every council is saved.</b> Open Past sessions to replay one or download its PDF.</span></li>
+      </ul>
+    </div>
+  </div>`;
+
 const SHAPES = ["base", "open", "mid", "blink"];
 const portrait = (key, shape = "base") => `/portraits/${key}-${shape}.webp`;
 const ROUND_NAME = ["", "Opening", "Debate", "Vote"];
 
 const state = {
   seats: [], byKey: {}, session: null, options: [], weights: {}, active: [], round: 0,
-  cards: { 1: {}, 2: {}, 3: {} }, replaying: false, verdict: null, links: [], geo: {},
+  cards: { 1: {}, 2: {}, 3: {} }, replaying: false, verdict: null, links: [], geo: {}, setup: null, wait: null,
 };
 
 // ------------------------------------------------------------- boot
@@ -38,6 +83,7 @@ async function boot() {
   else if (ss.live) attach(ss.live);
   refreshUsage();
   setInterval(watchForLive, 2500);
+  setInterval(tickWait, 1000);
 }
 
 // a council started in Claude Code shows up here on its own
@@ -55,7 +101,9 @@ function typeIn(el) {
   if (!el) return;
   const text = el.textContent;
   el.classList.add("typein");
-  el.innerHTML = [...text].map((c, i) => `<span class="ch" style="animation-delay:${i * 22}ms">${c === " " ? " " : esc(c)}</span>`).join("");
+  // characters sit inside a nowrap span per word, so lines only break between words
+  let i = 0;
+  el.innerHTML = text.split(" ").map((word) => `<span class="wd">${[...word].map((c) => `<span class="ch" style="animation-delay:${i++ * 22}ms">${esc(c)}</span>`).join("")}</span>`).join(" ");
   el.setAttribute("aria-label", text);
 }
 
@@ -69,8 +117,8 @@ function renderSamples() {
 }
 
 function renderSeats() {
-  $("#seats").innerHTML = state.seats.map((s) => `
-    <div class="seat" id="seat-${s.key}" data-seat="${s.key}" tabindex="0" role="button" aria-label="${esc(s.name)}, ${esc(s.pillar)}. Open card.">
+  $("#seats").innerHTML = state.seats.map((s, i) => `
+    <div class="seat" id="seat-${s.key}" data-seat="${s.key}" style="--d:-${(i * 1.7) % 6}s" tabindex="0" role="button" aria-label="${esc(s.name)}, ${esc(s.pillar)}. Open card.">
       <div class="think" aria-hidden="true"><i></i><i></i><i></i></div>
       <div class="bust" data-shape="base">${SHAPES.map((sh) => `<img class="${sh}" src="${portrait(s.key, sh)}" alt="" draggable="false">`).join("")}</div>
     </div>`).join("");
@@ -149,6 +197,15 @@ function bindUI() {
   $("#seats").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openFrom(e); } });
   $("#feed").addEventListener("click", (e) => { const c = e.target.closest(".feed-card"); if (c) openCard(c.dataset.seat, Number(c.dataset.round)); });
   $("#waitHistory").addEventListener("click", openHistory);
+  $("#waitGuide").addEventListener("click", openGuide);
+  $("#guideBtn").addEventListener("click", openGuide);
+  document.addEventListener("click", async (e) => {
+    if (e.target.closest("[data-copy-example]")) {
+      try { await navigator.clipboard.writeText("/roast-room " + EXAMPLE); toast("Copied. Paste it into Claude Code."); }
+      catch { toast("Copy didn't work here. Select the text and copy it."); }
+    }
+    if (e.target.closest("[data-pdf]")) savePdf(e.target.closest("[data-pdf]"));
+  });
   $("#historyBtn").addEventListener("click", openHistory);
   $("#newBtn").addEventListener("click", reset);
   $("#verdictSheet").addEventListener("click", (e) => { if (e.target.id === "verdictSheet" || e.target.closest("[data-close]")) $("#verdictSheet").hidden = true; });
@@ -174,6 +231,7 @@ const player = {
     while (this.q.length && my === this.epoch) {
       const ev = this.q.shift();
       this.info();
+      hideWait();
       try { await handle(ev); } catch (e) { console.error(e); }
     }
     if (my === this.epoch) { this.busy = false; this.fast = false; this.info(); }
@@ -195,7 +253,8 @@ const player = {
 function reset() {
   state.es?.close();
   player.reset();
-  Object.assign(state, { session: null, options: [], weights: {}, active: [], round: 0, cards: { 1: {}, 2: {}, 3: {} }, replaying: false, verdict: null, links: [], speaking: null });
+  Object.assign(state, { session: null, options: [], weights: {}, active: [], round: 0, cards: { 1: {}, 2: {}, 3: {} }, replaying: false, verdict: null, links: [], speaking: null, setup: null, wait: null });
+  hideWait();
   $("#stage").classList.remove("live");
   $("#topic").hidden = true;
   $("#composer").hidden = state.runner !== "api";
@@ -206,7 +265,8 @@ function reset() {
   $("#playbar").hidden = true;
   $("#newBtn").hidden = true;
   $("#verdictSheet").hidden = true;
-  $("#feed").innerHTML = '<div class="empty">One line per seat as the council talks. Click a seat to read its full card.</div>';
+  $("#panelHead").textContent = "Getting started";
+  $("#feed").innerHTML = GUIDE;
   $$(".vote").forEach((b) => b.remove());
   $$(".seat").forEach((el) => { el.classList.remove("absent", "speaking", "thinking", "addressed"); $(".bust", el).dataset.shape = "base"; });
   $$(".nameplate").forEach((el) => { el.classList.remove("absent", "speaking"); $(".chip", el).hidden = true; $(".score", el).hidden = true; $(".pips", el).innerHTML = ""; });
@@ -222,6 +282,8 @@ function begin(id) {
   $("#waiting").hidden = true;
   $("#newBtn").hidden = false;
   $("#playbar").hidden = false;
+  $("#panelHead").textContent = "Key points";
+  $("#feed").innerHTML = '<div class="empty">One line per seat as the council talks. Click a seat to read its full card.</div>';
   $("#stage").classList.add("live");
   chairSays("The council is taking their seats", { dots: true });
 }
@@ -257,6 +319,7 @@ function setStep(step) {
 async function handle(ev) {
   switch (ev.type) {
     case "phase": {
+      state.wait = { phase: ev.phase, at: ev.at || Date.now() };
       setStep(STEP_OF[ev.phase] || "setup");
       feedPhase(ev.label);
       const thinking = ["setup", "cruxes", "draft", "verdict"].includes(ev.phase);
@@ -266,15 +329,15 @@ async function handle(ev) {
       }
       break;
     }
-    case "setup": onSetup(ev); await player.sleep(1800); break;
+    case "setup": state.setup = ev; onSetup(ev); await player.sleep(1800); break;
     case "round_start": onRoundStart(ev.round); break;
     case "seat_start": $(`#seat-${ev.seat}`)?.classList.add("thinking"); break;
     case "seat_done": await onSeatDone(ev); break;
-    case "round_done": updateOptions(ev.scores); break;
+    case "round_done": state.wait = null; updateOptions(ev.scores); break;
     case "cruxes": await onCruxes(ev); break;
     case "draft": await onDraft(ev.draft); break;
-    case "verdict": onVerdict(ev); break;
-    case "error": toast(`The council stopped: ${ev.error}`); chairSays(`The council stopped: ${ev.error}`); break;
+    case "verdict": state.wait = null; onVerdict(ev); break;
+    case "error": state.wait = null; toast(`The council stopped: ${ev.error}`); chairSays(`The council stopped: ${ev.error}`); break;
   }
 }
 
@@ -594,7 +657,7 @@ function onVerdict(ev) {
   const html = `
     <div class="v-top">
       <div><div class="label">The council's verdict</div><span class="v-label ${labelClass(v.label)}">${esc(v.label)}</span></div>
-      <button class="ghost" data-close>Back to the table</button>
+      <div class="actions"><button class="pill" type="button" data-pdf>Download PDF</button><button class="ghost" data-close>Back to the table</button></div>
     </div>
     <p class="v-call">${esc(v.call)}</p>
     <div class="v-grid">
@@ -625,7 +688,7 @@ function onVerdict(ev) {
   $("#verdictBody").innerHTML = html;
   const plate = $("#plate");
   plate.hidden = false;
-  plate.innerHTML = `<div class="label">The council's verdict</div><span class="v-label ${labelClass(v.label)}">${esc(v.label)}</span><p>${esc(firstSentences(clean(v.call), 150))}</p><div class="row"><button type="button" id="plateOpen">Read the verdict</button><button type="button" class="alt" id="plateReplay">Replay this council</button></div>`;
+  plate.innerHTML = `<div class="label">The council's verdict</div><span class="v-label ${labelClass(v.label)}">${esc(v.label)}</span><p>${esc(firstSentences(clean(v.call), 150))}</p><div class="row"><button type="button" id="plateOpen">Read the verdict</button><button type="button" data-pdf>Download PDF</button><button type="button" class="alt" id="plateReplay">Replay this council</button></div>`;
   $("#plateOpen").addEventListener("click", () => ($("#verdictSheet").hidden = false));
   $("#plateReplay").addEventListener("click", () => replay(state.session));
   $("#playbar").hidden = true;
@@ -640,9 +703,9 @@ function onVerdict(ev) {
 async function openHistory() {
   const { sessions } = await fetch("/api/sessions").then((x) => x.json());
   $("#historyList").innerHTML = sessions.length
-    ? sessions.map((s) => `<li><button data-id="${esc(s.id)}"><b>${esc(s.title)}</b><small>${esc(s.id.slice(0, 10))} · ${esc(s.mode)} · ${esc(s.status)}</small></button></li>`).join("")
+    ? sessions.map((s) => `<li><button data-id="${esc(s.id)}"><b>${esc(s.title)}</b><small>${esc(s.id.slice(0, 10))} · ${esc(s.mode)} · ${esc(s.status)}</small></button>${s.status === "done" ? `<button class="pdf" type="button" data-pdf="${esc(s.id)}" title="Download the verdict as a PDF">PDF</button>` : ""}</li>`).join("")
     : '<li class="muted">No sessions yet. Convene the council once and it shows up here.</li>';
-  $$("#historyList button").forEach((b) => b.addEventListener("click", () => { $("#historyDialog").close(); replay(b.dataset.id); }));
+  $$("#historyList button[data-id]").forEach((b) => b.addEventListener("click", () => { $("#historyDialog").close(); replay(b.dataset.id); }));
   $("#historyDialog").showModal();
 }
 
@@ -653,6 +716,115 @@ async function replay(id) {
   for (const ev of j.events) {
     if (["delta", "usage", "seat_error", "end"].includes(ev.type)) continue;
     player.push(ev);
+  }
+}
+
+// ------------------------------------------------------------- waiting on Claude Code
+// A live council goes quiet for minutes while the seats write in parallel. Instead of a
+// frozen table, say what is happening, how long it has been, and what each seat is weighing.
+const SAME_TIME = "The advisors all write at the same time in Claude Code. Their lines play here as soon as the round is in.";
+function waitCopy(phase) {
+  const n = state.setup?.mode === "quick" ? 2 : 3;
+  return {
+    setup: ["Setting the table", "The Chair is seating the council.", ""],
+    round1: ["Round 1 of " + n, "The advisors are writing their opening positions.", SAME_TIME],
+    round2: ["Round 2 of " + n, "The advisors are reading each other's openings and firing back.", SAME_TIME],
+    round3: ["Round 3 of " + n, "The advisors are voting on the Chair's proposal.", SAME_TIME],
+    cruxes: ["Between rounds", "The Chair is reading the openings and finding where they disagree.", "The fight shows up here next, then the debate starts."],
+    draft: ["Between rounds", "The Chair is turning the debate into a proposal for the vote.", "Next, every advisor votes on it."],
+    skip3: ["Last step", "The Chair is scoring the room and writing the verdict.", "When it lands, you can download it as a PDF."],
+    verdict: ["Last step", "The Chair is scoring the room and writing the verdict.", "When it lands, you can download it as a PDF."],
+  }[phase] || ["Working", "The council is working.", ""];
+}
+const clock = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+
+function hideWait() {
+  const w = $("#waitcard");
+  if (w.hidden) return;
+  w.hidden = true;
+  $$(".seat.musing").forEach((e) => e.classList.remove("musing"));
+  if (state.capWasShown) $("#caption").hidden = false;
+  if (state.playbarWasShown) $("#playbar").hidden = false;
+}
+
+function tickWait() {
+  const w = state.wait;
+  const idle = !player.busy && !player.q.length;
+  if (!w || !idle || state.replaying || !state.session || state.verdict) return hideWait();
+  const card = $("#waitcard");
+  if (card.hidden) {
+    state.capWasShown = !$("#caption").hidden;
+    $("#caption").hidden = true;
+    $("#cruxes").hidden = true;
+    // speed controls do nothing while the room waits, and they would cover the card
+    state.playbarWasShown = !$("#playbar").hidden;
+    $("#playbar").hidden = true;
+    card.hidden = false;
+    state.museAt = 0;
+  }
+  const [step, head, sub] = waitCopy(w.phase);
+  const elapsed = Date.now() - w.at;
+  $("#wcStep").textContent = step;
+  $("#wcTime").textContent = clock(elapsed);
+  $("#wcHead").textContent = head;
+  $("#wcSub").textContent = sub;
+  $("#wcNudge").hidden = elapsed < 4 * 60 * 1000;
+  const round = Number((w.phase.match(/^round(\d)$/) || [])[1]) || 0;
+  const bar = $("#wcBar").parentElement;
+  const muse = $("#wcMuse");
+  if (round) {
+    const seats = state.active.length ? state.active : state.seats.map((s) => s.key);
+    const done = seats.filter((k) => state.cards[round][k]).length;
+    bar.classList.toggle("indeterminate", done === 0);
+    $("#wcBar").style.width = done ? Math.round((done / seats.length) * 100) + "%" : "";
+    // every few seconds, show what one of the still-thinking seats is weighing
+    const pending = seats.filter((k) => !state.cards[round][k]);
+    if (pending.length && Date.now() - (state.museAt || 0) > 5200) {
+      state.museAt = Date.now();
+      state.museIdx = ((state.museIdx ?? -1) + 1) % pending.length;
+      const s = state.byKey[pending[state.museIdx]];
+      muse.classList.add("fade");
+      setTimeout(() => {
+        muse.innerHTML = "<b>" + esc(s.short) + "</b> is weighing: " + esc(s.question.replace(/^./, (c) => c.toLowerCase())) + (done ? " · " + done + " of " + seats.length + " in" : "");
+        muse.classList.remove("fade");
+        $$(".seat").forEach((el) => el.classList.toggle("musing", el.dataset.seat === s.key));
+      }, 300);
+    }
+  } else {
+    bar.classList.add("indeterminate");
+    $("#wcBar").style.width = "";
+    muse.textContent = "";
+    $$(".seat.musing").forEach((e) => e.classList.remove("musing"));
+  }
+}
+
+function openGuide() {
+  $("#guideBody").innerHTML = GUIDE;
+  const d = $("#guideDialog");
+  if (!d.open) d.showModal();
+}
+
+// ------------------------------------------------------------- PDF
+async function savePdf(btn) {
+  const id = btn.dataset.pdf;
+  btn.disabled = true;
+  const old = btn.textContent;
+  btn.textContent = "Making PDF...";
+  try {
+    let setup = state.setup, verdict = state.verdict;
+    if (id) { // a past session from the history list
+      const j = await fetch("/api/sessions/" + encodeURIComponent(id)).then((x) => x.json());
+      setup = j.events.find((e) => e.type === "setup");
+      verdict = [...j.events].reverse().find((e) => e.type === "verdict");
+    }
+    if (!setup || !verdict) throw new Error("This council has no verdict yet.");
+    await downloadVerdictPdf({ setup, verdict, byKey: state.byKey, id: id || state.session });
+  } catch (e) {
+    console.error(e);
+    toast("Couldn't make the PDF: " + (e.message || e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old;
   }
 }
 

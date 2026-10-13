@@ -10,7 +10,7 @@ export const MODELS = {
   chair: process.env.CHAIR_MODEL || "claude-opus-5-5",
 };
 
-const CHAIR_SYSTEM = `You are the Chair of the Founder Council: seven simulated advisors built from the public work of Jeff Bezos (strategy and decisions), Paul Graham (product and startups), Alex Hormozi (offers, pricing, and sales), Gary Vaynerchuk (marketing and attention), Dan Martell (people, hiring, and founder time), Gino Wickman (operations and scaling), and Warren Buffett (money and capital).
+const CHAIR_SYSTEM = `You are the Chair of a Roast Room council: seven simulated advisors built from the public work of Jeff Bezos (strategy and decisions), Paul Graham (product and startups), Alex Hormozi (offers, pricing, and sales), Gary Vaynerchuk (marketing and attention), Dan Martell (people, hiring, and founder time), Gino Wickman (operations and scaling), and Warren Buffett (money and capital).
 You never argue a side and never add your own pillar. You run the room, keep score, and write in plain English: short sentences, no em dashes, no hype, no tee-ups like "here's the thing", no filler. Seat keys (for key fields only): bezos, graham, hormozi, garyvee, martell, wickman, buffett. Whenever you write a seat's name in prose or in a seat field, use its display name: Bezos, Graham, Hormozi, Gary V, Martell, Wickman, Buffett.`;
 
 export const DISCLAIMER = "Simulated advisors built from each person's public work. They are not the people and do not speak for them.";
@@ -54,7 +54,7 @@ const optLine = (st) => st.options.map((o) => `${o.id} n/10`).join(" · ");
 
 function round1Prompt(st, seat) {
   const w = st.weights[seat.key];
-  return `FOUNDER COUNCIL, ROUND 1 OF 3: OPENING POSITION
+  return `ROAST ROOM COUNCIL, ROUND 1 OF 3: OPENING POSITION
 
 You hold the ${seat.short.toUpperCase()} seat (${seat.pillar}).
 
@@ -93,7 +93,7 @@ function cardsBlock(st, round) {
 function round2Prompt(st, seat) {
   const cr = st.cruxes.map((c, i) => `${i + 1}. ${c.question} (${c.sides.map((x) => `${x.position}: ${x.seats.map((k) => byKey[k]?.short || k).join(", ")}`).join("; ")})`).join("\n");
   const push = st.pressure?.[seat.key] ? `\nFor you specifically: ${st.pressure[seat.key]}\n` : "";
-  return `FOUNDER COUNCIL, ROUND 2 OF 3: DEBATE
+  return `ROAST ROOM COUNCIL, ROUND 2 OF 3: DEBATE
 
 You hold the ${seat.short.toUpperCase()} seat.
 
@@ -125,7 +125,7 @@ Rules: engage the actual arguments on the table. Move only for a better argument
 
 function round3Prompt(st, seat) {
   const d = st.draft;
-  return `FOUNDER COUNCIL, ROUND 3 OF 3: VOTE ON THE DRAFT RESOLUTION
+  return `ROAST ROOM COUNCIL, ROUND 3 OF 3: VOTE ON THE DRAFT RESOLUTION
 
 You hold the ${seat.short.toUpperCase()} seat.
 
@@ -450,7 +450,7 @@ function verdictMarkdown(st) {
   const v = st.verdict;
   const opt = (id) => st.options.find((o) => o.id === id)?.label || id;
   const L = [];
-  L.push(`# Founder Council: ${st.title}`, "", `${new Date().toISOString().slice(0, 10)} · Seats: ${st.seats.map((k) => byKey[k].short).join(", ")} · Rounds: ${st.rounds.length} · Mode: ${st.mode}`, "");
+  L.push(`# Roast Room: ${st.title}`, "", `${new Date().toISOString().slice(0, 10)} · Seats: ${st.seats.map((k) => byKey[k].short).join(", ")} · Rounds: ${st.rounds.length} · Mode: ${st.mode}`, "");
   L.push(`## Verdict: ${v.label} (Option ${v.recommended}: ${opt(v.recommended)})`, "", `**The call:** ${v.call}`, "");
   L.push(`Option scores: ${st.options.map((o) => `${o.id} ${v.scores[o.id]?.score ?? "-"}`).join(" · ")}${v.support != null ? ` · Support for the resolution ${v.support}/10` : ""} · Confidence ${v.confidence ?? "-"}/10 · Spread ${v.spread}`);
   if (v.override_note) L.push("", v.override_note);
