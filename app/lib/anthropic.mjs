@@ -1,6 +1,6 @@
 import { env } from "./env.mjs";
 
-const URL = "https://api.anthropic.com/v1/messages";
+const URL = env("ANTHROPIC_API_URL") || "https://api.anthropic.com/v1/messages";
 const RETRY = new Set([429, 500, 502, 503, 529]);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
